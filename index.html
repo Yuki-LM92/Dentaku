@@ -1,0 +1,909 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Future Calculator</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    min-height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    background: #f5e6d3;
+    font-family: 'Segoe UI', 'Helvetica Neue', sans-serif;
+    overflow: hidden;
+    cursor: none;
+  }
+
+  /* Custom cursor - NO transition on transform */
+  #cursor {
+    position: fixed;
+    top: 0; left: 0;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,180,100,0.8), rgba(255,120,50,0.2));
+    pointer-events: none;
+    z-index: 9999;
+    will-change: transform;
+    transition: width 0.2s ease, height 0.2s ease, background 0.2s ease;
+  }
+
+  #cursor.hovering {
+    width: 30px;
+    height: 30px;
+    background: radial-gradient(circle, rgba(255,160,60,0.9), rgba(255,100,30,0.3));
+  }
+
+  #cursor-ring {
+    position: fixed;
+    top: 0; left: 0;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: 1.5px solid rgba(180,120,60,0.4);
+    pointer-events: none;
+    z-index: 9998;
+    will-change: transform;
+    transition: width 0.25s ease, height 0.25s ease, border-color 0.3s ease;
+  }
+
+  #cursor-ring.hovering {
+    width: 55px;
+    height: 55px;
+    border-color: rgba(220,140,60,0.6);
+  }
+
+  /* Floating particles - use separate keyframes for different durations */
+  .particle {
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 1;
+  }
+
+  .particle-click {
+    opacity: 0.8;
+    animation: floatUpClick 2s ease-out forwards;
+  }
+
+  .particle-ambient {
+    opacity: 0.5;
+    animation: floatUpAmbient var(--duration, 4s) ease-out forwards;
+  }
+
+  @keyframes floatUpClick {
+    0% { opacity: 0.8; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-120px) scale(0); }
+  }
+
+  @keyframes floatUpAmbient {
+    0% { opacity: 0.4; transform: translateY(0) scale(1); }
+    100% { opacity: 0; transform: translateY(-200px) scale(0); }
+  }
+
+  /* Background glow */
+  #bg-glow {
+    position: fixed;
+    top: 0; left: 0;
+    width: 500px;
+    height: 500px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255,200,150,0.25) 0%, transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+    will-change: transform;
+  }
+
+  /* Ambient floating orbs */
+  .orb {
+    position: fixed;
+    border-radius: 50%;
+    pointer-events: none;
+    z-index: 0;
+    filter: blur(40px);
+    animation: orbFloat 8s ease-in-out infinite;
+  }
+
+  @keyframes orbFloat {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    25% { transform: translate(30px, -20px) scale(1.1); }
+    50% { transform: translate(-20px, -40px) scale(0.95); }
+    75% { transform: translate(20px, 20px) scale(1.05); }
+  }
+
+  /* Calculator container */
+  .calculator {
+    position: relative;
+    z-index: 10;
+    width: 340px;
+    background: linear-gradient(145deg, rgba(255,250,240,0.85), rgba(240,225,205,0.9));
+    backdrop-filter: blur(20px);
+    border-radius: 28px;
+    padding: 24px;
+    box-shadow:
+      0 25px 60px rgba(120,80,40,0.15),
+      0 2px 8px rgba(120,80,40,0.1),
+      inset 0 1px 0 rgba(255,255,255,0.6);
+    border: 1px solid rgba(255,255,255,0.5);
+    will-change: transform;
+    transition: box-shadow 0.4s ease;
+  }
+
+  .calculator:hover {
+    box-shadow:
+      0 30px 70px rgba(120,80,40,0.2),
+      0 2px 8px rgba(120,80,40,0.12),
+      inset 0 1px 0 rgba(255,255,255,0.7);
+  }
+
+  /* Glow border - CSS fallback for browsers without @property */
+  .glow-border {
+    position: absolute;
+    top: -1px; left: -1px; right: -1px; bottom: -1px;
+    border-radius: 28px;
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.5s;
+    overflow: hidden;
+  }
+
+  .glow-border::before {
+    content: '';
+    position: absolute;
+    top: -50%; left: -50%;
+    width: 200%; height: 200%;
+    background: conic-gradient(
+      transparent, rgba(255,180,100,0.3), transparent, rgba(255,150,80,0.2), transparent
+    );
+    animation: rotateBorderFallback 4s linear infinite;
+  }
+
+  @keyframes rotateBorderFallback {
+    to { transform: rotate(360deg); }
+  }
+
+  .calculator:hover .glow-border {
+    opacity: 1;
+  }
+
+  /* Title - now interactive */
+  .calc-title {
+    text-align: center;
+    font-size: 10px;
+    letter-spacing: 6px;
+    text-transform: uppercase;
+    color: rgba(150,120,80,0.6);
+    margin-bottom: 16px;
+    font-weight: 300;
+    transition: color 0.3s, letter-spacing 0.4s ease, text-shadow 0.3s;
+    cursor: none;
+  }
+
+  .calc-title:hover {
+    color: rgba(200,140,60,0.85);
+    letter-spacing: 10px;
+    text-shadow: 0 0 12px rgba(255,180,100,0.3);
+  }
+
+  /* Display */
+  .display-container {
+    position: relative;
+    background: linear-gradient(135deg, #1a1a2e, #16213e);
+    border-radius: 18px;
+    padding: 20px 22px;
+    margin-bottom: 20px;
+    overflow: hidden;
+    box-shadow:
+      inset 0 4px 12px rgba(0,0,0,0.3),
+      0 1px 0 rgba(255,255,255,0.3);
+    transition: box-shadow 0.4s ease;
+  }
+
+  .display-container:hover {
+    box-shadow:
+      inset 0 4px 12px rgba(0,0,0,0.3),
+      0 0 20px rgba(255,180,100,0.15),
+      0 1px 0 rgba(255,255,255,0.3);
+  }
+
+  .display-container.flash {
+    box-shadow:
+      inset 0 4px 12px rgba(0,0,0,0.3),
+      0 0 35px rgba(255,180,100,0.3),
+      0 1px 0 rgba(255,255,255,0.3);
+  }
+
+  .display-container::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(255,200,150,0.3), transparent);
+  }
+
+  .display-container::after {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: repeating-linear-gradient(
+      transparent,
+      transparent 2px,
+      rgba(0,0,0,0.03) 2px,
+      rgba(0,0,0,0.03) 4px
+    );
+    pointer-events: none;
+  }
+
+  .expression {
+    font-size: 13px;
+    color: rgba(255,200,150,0.5);
+    text-align: right;
+    min-height: 20px;
+    font-family: 'Courier New', monospace;
+    letter-spacing: 1px;
+  }
+
+  .display {
+    font-size: 38px;
+    color: #ffeedd;
+    text-align: right;
+    font-weight: 200;
+    letter-spacing: 1px;
+    font-family: 'Courier New', monospace;
+    text-shadow: 0 0 20px rgba(255,200,150,0.3);
+    transition: text-shadow 0.3s, font-size 0.25s ease;
+    word-break: break-all;
+    line-height: 1.2;
+  }
+
+  .display.pulse {
+    text-shadow: 0 0 30px rgba(255,200,150,0.6);
+  }
+
+  .display.error {
+    color: #ff8877;
+    text-shadow: 0 0 20px rgba(255,80,60,0.4);
+  }
+
+  .status-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 6px;
+  }
+
+  .status-dot {
+    width: 5px;
+    height: 5px;
+    border-radius: 50%;
+    background: rgba(100,255,180,0.6);
+    box-shadow: 0 0 6px rgba(100,255,180,0.3);
+    animation: blink 2s ease-in-out infinite;
+  }
+
+  .status-dot.error {
+    background: rgba(255,100,80,0.7);
+    box-shadow: 0 0 6px rgba(255,80,60,0.4);
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  .status-text {
+    font-size: 8px;
+    letter-spacing: 3px;
+    color: rgba(255,200,150,0.25);
+    text-transform: uppercase;
+    transition: color 0.3s;
+  }
+
+  /* Button grid */
+  .buttons {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 10px;
+  }
+
+  .btn {
+    position: relative;
+    height: 58px;
+    border: none;
+    border-radius: 14px;
+    font-size: 18px;
+    font-weight: 400;
+    cursor: none;
+    transition: transform 0.2s cubic-bezier(0.25,0.1,0.25,1),
+                box-shadow 0.2s ease,
+                background 0.2s ease,
+                color 0.2s ease;
+    overflow: hidden;
+    font-family: 'Segoe UI', sans-serif;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+  }
+
+  .btn .ripple {
+    position: absolute;
+    border-radius: 50%;
+    transform: scale(0);
+    animation: rippleAnim 0.6s ease-out;
+    pointer-events: none;
+  }
+
+  @keyframes rippleAnim {
+    to { transform: scale(4); opacity: 0; }
+  }
+
+  /* Number buttons */
+  .btn-num {
+    background: linear-gradient(145deg, rgba(255,252,245,0.9), rgba(240,232,220,0.9));
+    color: #5a4a3a;
+    box-shadow:
+      0 3px 8px rgba(120,80,40,0.1),
+      inset 0 1px 0 rgba(255,255,255,0.8);
+  }
+
+  .btn-num:hover {
+    background: linear-gradient(145deg, #fff, #f5ebe0);
+    transform: translateY(-2px) scale(1.04);
+    box-shadow:
+      0 6px 16px rgba(120,80,40,0.15),
+      inset 0 1px 0 rgba(255,255,255,0.9);
+  }
+
+  .btn-num:active {
+    transform: translateY(1px) scale(0.97);
+    box-shadow:
+      0 1px 4px rgba(120,80,40,0.1),
+      inset 0 2px 4px rgba(0,0,0,0.05);
+  }
+
+  .btn-num .ripple { background: rgba(180,140,80,0.2); }
+
+  /* Operator buttons */
+  .btn-op {
+    background: linear-gradient(145deg, rgba(220,200,175,0.9), rgba(200,178,155,0.9));
+    color: #6a5540;
+    box-shadow:
+      0 3px 8px rgba(120,80,40,0.12),
+      inset 0 1px 0 rgba(255,255,255,0.5);
+    font-size: 20px;
+  }
+
+  .btn-op:hover {
+    background: linear-gradient(145deg, #dcc8a8, #c8b298);
+    transform: translateY(-2px) scale(1.06);
+    box-shadow:
+      0 6px 16px rgba(120,80,40,0.18),
+      inset 0 1px 0 rgba(255,255,255,0.6);
+    color: #4a3520;
+  }
+
+  .btn-op:active {
+    transform: translateY(1px) scale(0.96);
+  }
+
+  .btn-op.active-op {
+    background: linear-gradient(145deg, #c8a878, #b89868);
+    color: #fff;
+    box-shadow:
+      0 2px 10px rgba(180,130,60,0.3),
+      inset 0 1px 0 rgba(255,255,255,0.3);
+  }
+
+  .btn-op .ripple { background: rgba(150,100,50,0.25); }
+
+  /* Equals button */
+  .btn-eq {
+    background: linear-gradient(145deg, #e8a065, #d4884a);
+    color: #fff;
+    box-shadow:
+      0 4px 12px rgba(220,140,60,0.3),
+      inset 0 1px 0 rgba(255,255,255,0.3);
+    font-size: 22px;
+  }
+
+  .btn-eq:hover {
+    background: linear-gradient(145deg, #f0a868, #e09050);
+    transform: translateY(-3px) scale(1.06);
+    box-shadow:
+      0 8px 24px rgba(220,140,60,0.4),
+      inset 0 1px 0 rgba(255,255,255,0.4);
+  }
+
+  .btn-eq:active {
+    transform: translateY(1px) scale(0.96);
+    box-shadow: 0 2px 6px rgba(220,140,60,0.2);
+  }
+
+  .btn-eq .ripple { background: rgba(255,255,255,0.3); }
+
+  /* Clear / special buttons */
+  .btn-clear {
+    background: linear-gradient(145deg, rgba(255,220,200,0.9), rgba(240,195,175,0.9));
+    color: #b06040;
+    box-shadow:
+      0 3px 8px rgba(180,80,40,0.1),
+      inset 0 1px 0 rgba(255,255,255,0.6);
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .btn-clear:hover {
+    background: linear-gradient(145deg, #ffd8c0, #f0b898);
+    transform: translateY(-2px) scale(1.04);
+    box-shadow: 0 6px 16px rgba(180,80,40,0.15);
+  }
+
+  .btn-clear:active {
+    transform: translateY(1px) scale(0.97);
+  }
+
+  .btn-clear .ripple { background: rgba(200,80,40,0.15); }
+
+  .btn-wide { grid-column: span 2; }
+
+  /* Tilt wrapper */
+  .tilt-wrapper {
+    perspective: 800px;
+  }
+
+  /* Tooltip */
+  .btn-tooltip {
+    position: absolute;
+    top: -30px;
+    left: 50%;
+    transform: translateX(-50%) scale(0.8);
+    background: rgba(40,30,20,0.85);
+    color: #ffeedd;
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 6px;
+    pointer-events: none;
+    opacity: 0;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+    letter-spacing: 1px;
+    font-weight: 400;
+  }
+
+  .btn:hover .btn-tooltip {
+    opacity: 1;
+    transform: translateX(-50%) scale(1) translateY(-4px);
+  }
+</style>
+</head>
+<body>
+
+<div id="cursor"></div>
+<div id="cursor-ring"></div>
+<div id="bg-glow"></div>
+
+<div class="orb" style="width:200px;height:200px;background:rgba(255,180,130,0.12);top:10%;left:15%;animation-delay:-2s;"></div>
+<div class="orb" style="width:150px;height:150px;background:rgba(255,160,100,0.08);top:60%;right:10%;animation-delay:-5s;animation-duration:10s;"></div>
+<div class="orb" style="width:180px;height:180px;background:rgba(200,160,130,0.1);bottom:15%;left:50%;animation-delay:-3s;animation-duration:12s;"></div>
+
+<div class="tilt-wrapper">
+  <div class="calculator" id="calculator">
+    <div class="glow-border"></div>
+    <div class="calc-title" id="calc-title">FUTURE CALC ─ 2077</div>
+
+    <div class="display-container" id="display-container">
+      <div class="expression" id="expression"></div>
+      <div class="display" id="display">0</div>
+      <div class="status-bar">
+        <div class="status-dot" id="status-dot"></div>
+        <div class="status-text" id="status-text">System Ready</div>
+      </div>
+    </div>
+
+    <div class="buttons" id="buttons">
+      <button class="btn btn-clear" data-action="clear"><span class="btn-tooltip">ALL CLEAR</span>AC</button>
+      <button class="btn btn-clear" data-action="backspace"><span class="btn-tooltip">DELETE</span>⌫</button>
+      <button class="btn btn-op" data-action="percent"><span class="btn-tooltip">PERCENT</span>%</button>
+      <button class="btn btn-op" data-action="operator" data-value="÷"><span class="btn-tooltip">DIVIDE</span>÷</button>
+
+      <button class="btn btn-num" data-action="number" data-value="7">7</button>
+      <button class="btn btn-num" data-action="number" data-value="8">8</button>
+      <button class="btn btn-num" data-action="number" data-value="9">9</button>
+      <button class="btn btn-op" data-action="operator" data-value="×"><span class="btn-tooltip">MULTIPLY</span>×</button>
+
+      <button class="btn btn-num" data-action="number" data-value="4">4</button>
+      <button class="btn btn-num" data-action="number" data-value="5">5</button>
+      <button class="btn btn-num" data-action="number" data-value="6">6</button>
+      <button class="btn btn-op" data-action="operator" data-value="−"><span class="btn-tooltip">SUBTRACT</span>−</button>
+
+      <button class="btn btn-num" data-action="number" data-value="1">1</button>
+      <button class="btn btn-num" data-action="number" data-value="2">2</button>
+      <button class="btn btn-num" data-action="number" data-value="3">3</button>
+      <button class="btn btn-op" data-action="operator" data-value="+"><span class="btn-tooltip">ADD</span>+</button>
+
+      <button class="btn btn-num btn-wide" data-action="number" data-value="0">0</button>
+      <button class="btn btn-num" data-action="decimal"><span class="btn-tooltip">DECIMAL</span>.</button>
+      <button class="btn btn-eq" data-action="equals"><span class="btn-tooltip">CALCULATE</span>=</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ─── Cursor System (rAF-based, no CSS transition on position) ───
+  const cursorEl = document.getElementById('cursor');
+  const ringEl = document.getElementById('cursor-ring');
+  const bgGlow = document.getElementById('bg-glow');
+
+  let mouseX = -100, mouseY = -100;
+  let ringX = -100, ringY = -100;
+  let glowX = -100, glowY = -100;
+  let isHoveringBtn = false;
+
+  document.addEventListener('mousemove', (e) => {
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+  });
+
+  // Single rAF loop for all cursor-related animations
+  function cursorLoop() {
+    // Cursor: instant follow
+    const cSize = isHoveringBtn ? 30 : 20;
+    const cHalf = cSize / 2;
+    cursorEl.style.transform = `translate3d(${mouseX - cHalf}px, ${mouseY - cHalf}px, 0)`;
+
+    // Ring: smooth follow with correct offset
+    ringX += (mouseX - ringX) * 0.13;
+    ringY += (mouseY - ringY) * 0.13;
+    const rSize = isHoveringBtn ? 55 : 40;
+    const rHalf = rSize / 2;
+    ringEl.style.transform = `translate3d(${ringX - rHalf}px, ${ringY - rHalf}px, 0)`;
+
+    // Background glow: very smooth follow
+    glowX += (mouseX - glowX) * 0.05;
+    glowY += (mouseY - glowY) * 0.05;
+    bgGlow.style.transform = `translate3d(${glowX - 250}px, ${glowY - 250}px, 0)`;
+
+    requestAnimationFrame(cursorLoop);
+  }
+  cursorLoop();
+
+  // Button hover state
+  document.querySelectorAll('.btn, .calc-title').forEach(el => {
+    el.addEventListener('mouseenter', () => {
+      isHoveringBtn = true;
+      cursorEl.classList.add('hovering');
+      ringEl.classList.add('hovering');
+    });
+    el.addEventListener('mouseleave', () => {
+      isHoveringBtn = false;
+      cursorEl.classList.remove('hovering');
+      ringEl.classList.remove('hovering');
+    });
+  });
+
+  // ─── 3D Tilt Effect (rAF based) ───
+  const calc = document.getElementById('calculator');
+  let tiltX = 0, tiltY = 0, targetTiltX = 0, targetTiltY = 0;
+  let isOverCalc = false;
+
+  calc.addEventListener('mousemove', (e) => {
+    const rect = calc.getBoundingClientRect();
+    const x = (e.clientX - rect.left) / rect.width - 0.5;
+    const y = (e.clientY - rect.top) / rect.height - 0.5;
+    targetTiltX = x * 8;
+    targetTiltY = -y * 8;
+    isOverCalc = true;
+  });
+
+  calc.addEventListener('mouseleave', () => {
+    targetTiltX = 0;
+    targetTiltY = 0;
+    isOverCalc = false;
+  });
+
+  function tiltLoop() {
+    tiltX += (targetTiltX - tiltX) * 0.08;
+    tiltY += (targetTiltY - tiltY) * 0.08;
+    if (Math.abs(tiltX) > 0.01 || Math.abs(tiltY) > 0.01 || isOverCalc) {
+      calc.style.transform = `rotateY(${tiltX}deg) rotateX(${tiltY}deg)`;
+    }
+    requestAnimationFrame(tiltLoop);
+  }
+  tiltLoop();
+
+  // ─── Ripple Effect ───
+  document.querySelectorAll('.btn').forEach(btn => {
+    btn.addEventListener('click', function(e) {
+      const ripple = document.createElement('span');
+      ripple.classList.add('ripple');
+      const rect = this.getBoundingClientRect();
+      const size = Math.max(rect.width, rect.height);
+      ripple.style.width = ripple.style.height = size + 'px';
+      ripple.style.left = (e.clientX - rect.left - size / 2) + 'px';
+      ripple.style.top = (e.clientY - rect.top - size / 2) + 'px';
+      this.appendChild(ripple);
+      setTimeout(() => ripple.remove(), 600);
+    });
+  });
+
+  // ─── Click Particles ───
+  function spawnClickParticles(x, y) {
+    for (let i = 0; i < 6; i++) {
+      const p = document.createElement('div');
+      p.classList.add('particle', 'particle-click');
+      const colors = ['#ffb870','#ffa050','#ffd0a0','#ff9040','#ffe0c0'];
+      p.style.background = colors[Math.floor(Math.random() * colors.length)];
+      p.style.left = (x + (Math.random() - 0.5) * 40) + 'px';
+      p.style.top = (y + (Math.random() - 0.5) * 20) + 'px';
+      const s = 3 + Math.random() * 4;
+      p.style.width = s + 'px';
+      p.style.height = s + 'px';
+      document.body.appendChild(p);
+      setTimeout(() => p.remove(), 2000);
+    }
+  }
+
+  document.querySelectorAll('.btn').forEach(btn => {
+    btn.addEventListener('click', (e) => spawnClickParticles(e.clientX, e.clientY));
+  });
+
+  // ─── Ambient Particles (using CSS variable for duration) ───
+  setInterval(() => {
+    const p = document.createElement('div');
+    p.classList.add('particle', 'particle-ambient');
+    p.style.background = `rgba(255,${150 + Math.random()*60},${80 + Math.random()*60},0.2)`;
+    p.style.left = (Math.random() * window.innerWidth) + 'px';
+    p.style.top = (window.innerHeight + 10) + 'px';
+    const s = 2 + Math.random() * 3;
+    p.style.width = s + 'px';
+    p.style.height = s + 'px';
+    const dur = 3 + Math.random() * 3;
+    p.style.setProperty('--duration', dur + 's');
+    document.body.appendChild(p);
+    setTimeout(() => p.remove(), dur * 1000 + 100);
+  }, 800);
+
+  // ─── Title Interaction ───
+  const calcTitle = document.getElementById('calc-title');
+  calcTitle.addEventListener('click', () => {
+    spawnClickParticles(mouseX, mouseY);
+    calcTitle.textContent = ['FUTURE CALC ─ 2077','QUANTUM READY','∞ PRECISION','HELLO HUMAN'][Math.floor(Math.random()*4)];
+    setTimeout(() => { calcTitle.textContent = 'FUTURE CALC ─ 2077'; }, 1500);
+  });
+
+  // ─── Calculator Logic ───
+  const display = document.getElementById('display');
+  const expressionEl = document.getElementById('expression');
+  const statusDot = document.getElementById('status-dot');
+  const statusText = document.getElementById('status-text');
+  const displayContainer = document.getElementById('display-container');
+
+  let currentInput = '0';
+  let previousInput = '';
+  let operator = null;
+  let shouldResetDisplay = false;
+  let isError = false;
+  // For repeated equals
+  let lastOperator = null;
+  let lastOperand = null;
+
+  function setStatus(text, error) {
+    statusText.textContent = text;
+    if (error) {
+      statusDot.classList.add('error');
+      statusText.style.color = 'rgba(255,120,100,0.4)';
+    } else {
+      statusDot.classList.remove('error');
+      statusText.style.color = '';
+    }
+  }
+
+  function clearError() {
+    if (isError) {
+      isError = false;
+      display.classList.remove('error');
+      setStatus('System Ready', false);
+    }
+  }
+
+  function updateDisplay() {
+    display.textContent = currentInput;
+    display.classList.add('pulse');
+    setTimeout(() => display.classList.remove('pulse'), 200);
+
+    if (currentInput.length > 10) {
+      display.style.fontSize = '24px';
+    } else if (currentInput.length > 7) {
+      display.style.fontSize = '30px';
+    } else {
+      display.style.fontSize = '38px';
+    }
+  }
+
+  function flashDisplay() {
+    displayContainer.classList.add('flash');
+    setTimeout(() => displayContainer.classList.remove('flash'), 400);
+  }
+
+  function highlightActiveOp(op) {
+    document.querySelectorAll('.btn-op[data-action="operator"]').forEach(b => {
+      b.classList.toggle('active-op', b.dataset.value === op);
+    });
+  }
+
+  function clearActiveOp() {
+    document.querySelectorAll('.btn-op').forEach(b => b.classList.remove('active-op'));
+  }
+
+  function handleNumber(num) {
+    clearError();
+    if (currentInput === '0' || shouldResetDisplay) {
+      currentInput = num;
+      shouldResetDisplay = false;
+    } else if (currentInput.length < 15) {
+      currentInput += num;
+    }
+    updateDisplay();
+    setStatus('Inputting', false);
+  }
+
+  function handleDecimal() {
+    clearError();
+    if (shouldResetDisplay) {
+      currentInput = '0.';
+      shouldResetDisplay = false;
+    } else if (!currentInput.includes('.')) {
+      currentInput += '.';
+    }
+    updateDisplay();
+  }
+
+  function handleOperator(op) {
+    clearError();
+    if (operator && !shouldResetDisplay) {
+      calculate(false);
+    }
+    previousInput = currentInput;
+    operator = op;
+    shouldResetDisplay = true;
+    lastOperator = null;
+    lastOperand = null;
+    expressionEl.textContent = `${previousInput} ${op}`;
+    highlightActiveOp(op);
+    setStatus('Operator: ' + op, false);
+  }
+
+  function calculate(isRepeat) {
+    if (isRepeat && lastOperator && lastOperand !== null) {
+      // Repeated equals: apply last operation again
+      const prev = parseFloat(currentInput);
+      const operand = parseFloat(lastOperand);
+      let result = compute(prev, operand, lastOperator);
+      expressionEl.textContent = `${currentInput} ${lastOperator} ${lastOperand} =`;
+      finishCalc(result);
+      return;
+    }
+
+    if (!operator || shouldResetDisplay) {
+      if (!operator && lastOperator) {
+        calculate(true);
+      }
+      return;
+    }
+
+    const prev = parseFloat(previousInput);
+    const curr = parseFloat(currentInput);
+
+    lastOperator = operator;
+    lastOperand = currentInput;
+
+    let result = compute(prev, curr, operator);
+    expressionEl.textContent = `${previousInput} ${operator} ${currentInput} =`;
+    operator = null;
+    previousInput = '';
+    clearActiveOp();
+    finishCalc(result);
+  }
+
+  function compute(a, b, op) {
+    switch (op) {
+      case '+': return a + b;
+      case '−': return a - b;
+      case '×': return a * b;
+      case '÷': return b !== 0 ? a / b : NaN;
+      default: return b;
+    }
+  }
+
+  function finishCalc(result) {
+    if (isNaN(result) || !isFinite(result)) {
+      currentInput = 'Error';
+      isError = true;
+      display.classList.add('error');
+      setStatus('Division Error', true);
+    } else {
+      result = parseFloat(result.toPrecision(12));
+      currentInput = result.toString();
+      setStatus('Calculated', false);
+    }
+    shouldResetDisplay = true;
+    updateDisplay();
+    flashDisplay();
+  }
+
+  function handlePercent() {
+    clearError();
+    currentInput = (parseFloat(currentInput) / 100).toString();
+    updateDisplay();
+    setStatus('Percent', false);
+  }
+
+  function handleClear() {
+    currentInput = '0';
+    previousInput = '';
+    operator = null;
+    shouldResetDisplay = false;
+    lastOperator = null;
+    lastOperand = null;
+    isError = false;
+    display.classList.remove('error');
+    expressionEl.textContent = '';
+    clearActiveOp();
+    updateDisplay();
+    setStatus('System Ready', false);
+    flashDisplay();
+  }
+
+  function handleBackspace() {
+    // Fix #5: Check error state first
+    if (isError) {
+      handleClear();
+      return;
+    }
+    if (shouldResetDisplay) return;
+    if (currentInput.length > 1) {
+      currentInput = currentInput.slice(0, -1);
+    } else {
+      currentInput = '0';
+    }
+    updateDisplay();
+  }
+
+  // ─── Event Delegation ───
+  document.getElementById('buttons').addEventListener('click', (e) => {
+    const btn = e.target.closest('.btn');
+    if (!btn) return;
+
+    const action = btn.dataset.action;
+    const value = btn.dataset.value;
+
+    switch (action) {
+      case 'number': handleNumber(value); break;
+      case 'decimal': handleDecimal(); break;
+      case 'operator': handleOperator(value); break;
+      case 'equals': calculate(false); break;
+      case 'percent': handlePercent(); break;
+      case 'clear': handleClear(); break;
+      case 'backspace': handleBackspace(); break;
+    }
+  });
+
+  // ─── Keyboard Support ───
+  document.addEventListener('keydown', (e) => {
+    if (e.key >= '0' && e.key <= '9') handleNumber(e.key);
+    else if (e.key === '.') handleDecimal();
+    else if (e.key === '+') handleOperator('+');
+    else if (e.key === '-') handleOperator('−');
+    else if (e.key === '*') handleOperator('×');
+    else if (e.key === '/') { e.preventDefault(); handleOperator('÷'); }
+    else if (e.key === 'Enter' || e.key === '=') calculate(false);
+    else if (e.key === 'Escape') handleClear();
+    else if (e.key === 'Backspace') handleBackspace();
+    else if (e.key === '%') handlePercent();
+  });
+</script>
+</body>
+</html>
